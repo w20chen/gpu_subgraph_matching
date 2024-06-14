@@ -1,0 +1,34 @@
+#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
+#include "helper.h"
+#include "graph.h"
+#include "graph_gpu.h"
+#include "candidate.h"
+#include "join.h"
+#include "join_bfs.h"
+
+
+int main(int argc, char **argv) {
+    InputParser cmd_parser(argc, argv);
+    std::string input_query_graph_file = cmd_parser.get_cmd_option("-q");
+    std::string input_data_graph_file = cmd_parser.get_cmd_option("-d");
+
+    Graph Q(input_query_graph_file, true);
+    Graph G(input_data_graph_file, false);
+
+    std::vector<int> matching_order;
+    Q.generate_matching_order(matching_order);
+
+    Graph_GPU Q_GPU(Q);
+    Graph_GPU G_GPU(G);
+
+    candidate_graph CG(Q, G);
+    candidate_graph_GPU CG_GPU(CG);
+
+    int ret = join_bfs(Q, G, Q_GPU, G_GPU, CG, CG_GPU, matching_order);
+    printf("Result: %d\n", ret);
+
+    return 0;
+}
