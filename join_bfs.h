@@ -7,9 +7,9 @@
 
 
 void __global__ BFS_Extend(
-    const Graph_GPU &Q,
-    const Graph_GPU &G,
-    const candidate_graph_GPU &cg,
+    const Graph_GPU Q,
+    const Graph_GPU G,
+    const candidate_graph_GPU cg,
     int partial_matching_cnt,
     int partial_matching_len,
     int *d_head,

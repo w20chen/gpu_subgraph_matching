@@ -102,6 +102,9 @@ private:
 
 static __device__ bool 
 binary_search(int *nums, int n, int value) {
+    if (nums == nullptr) {
+        return false;
+    }
     int low = 0;
     int high = n - 1;
     while (low <= high) {

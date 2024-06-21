@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
+#include <assert.h>
 #include "helper.h"
 #include "graph.h"
 #include "graph_gpu.h"
@@ -12,6 +13,8 @@
 
 int main(int argc, char **argv) {
     InputParser cmd_parser(argc, argv);
+    assert(cmd_parser.check_cmd_option_exists("-q"));
+    assert(cmd_parser.check_cmd_option_exists("-d"));
     std::string input_query_graph_file = cmd_parser.get_cmd_option("-q");
     std::string input_data_graph_file = cmd_parser.get_cmd_option("-d");
 
@@ -20,6 +23,7 @@ int main(int argc, char **argv) {
 
     std::vector<int> matching_order;
     Q.generate_matching_order(matching_order);
+    Q.generate_backward_neighborhood(matching_order);
 
     Graph_GPU Q_GPU(Q);
     Graph_GPU G_GPU(G);
@@ -28,7 +32,7 @@ int main(int argc, char **argv) {
     candidate_graph_GPU CG_GPU(CG);
 
     int ret = join_bfs(Q, G, Q_GPU, G_GPU, CG, CG_GPU, matching_order);
-    printf("Result: %d\n", ret);
+    printf("\033[41;37mResult: %d\033[0m\n", ret);
 
     return 0;
 }

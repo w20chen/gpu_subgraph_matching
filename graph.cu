@@ -170,4 +170,10 @@ void Graph::generate_matching_order(std::vector<int> &matching_order) const
         tie_vertices.clear();
         temp.clear();
     }
+
+    std::cout << "matching order: ";
+    for (auto v : matching_order) {
+        std::cout << v << " ";
+    }
+    std::cout << std::endl;
 }

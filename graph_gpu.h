@@ -8,7 +8,7 @@ class Graph_GPU {
 public:
     int *d_vcount_;
 
-    int *d_vlabel_;
+    // int *d_vlabel_;
 
     int *d_adj_;
     int *d_offset_;
@@ -22,8 +22,8 @@ public:
         CHECK(cudaMalloc(&d_vcount_, sizeof(int)));
         CHECK(cudaMemcpy(d_vcount_, &vc, sizeof(int), cudaMemcpyHostToDevice));
 
-        CHECK(cudaMalloc(&d_vlabel_, sizeof(int) * G.vcount()));
-        CHECK(cudaMemcpy(d_vlabel_, G.vertex_label_.data(), sizeof(int) * G.vcount(), cudaMemcpyHostToDevice));
+        // CHECK(cudaMalloc(&d_vlabel_, sizeof(int) * G.vcount()));
+        // CHECK(cudaMemcpy(d_vlabel_, G.vertex_label_.data(), sizeof(int) * G.vcount(), cudaMemcpyHostToDevice));
 
         int *h_adj_ = (int *)malloc(sizeof(int) * G.ecount() * 2);
         int *h_offset_ = (int *)malloc(sizeof(int) * (G.vcount() + 1));
@@ -49,6 +49,8 @@ public:
             CHECK(cudaMalloc(&d_bknbrs_offset_, sizeof(int) * G.bknbrs_offset_.size()));
             CHECK(cudaMemcpy(d_bknbrs_, G.bknbrs_.data(), sizeof(int) * G.bknbrs_.size(), cudaMemcpyHostToDevice));
             CHECK(cudaMemcpy(d_bknbrs_offset_, G.bknbrs_offset_.data(), sizeof(int) * G.bknbrs_offset_.size(), cudaMemcpyHostToDevice));
+            assert(G.bknbrs_.size() != 0);
+            assert(G.bknbrs_offset_.size() != 0 && G.bknbrs_offset_.size() == G.vcount() + 1);
         }
     }
 };

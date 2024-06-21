@@ -5,9 +5,9 @@ __device__ int d_prealloc_cnt;
 
 
 void __global__ BFS_Extend(
-    const Graph_GPU &Q,
-    const Graph_GPU &G,
-    const candidate_graph_GPU &cg,
+    const Graph_GPU Q,
+    const Graph_GPU G,
+    const candidate_graph_GPU cg,
     int partial_matching_cnt,
     int partial_matching_len,
     int *d_head,
@@ -28,7 +28,12 @@ void __global__ BFS_Extend(
     }
 
     // find first backward neighbor fuu of u
-    int fuu = Q.d_bknbrs_[Q.d_bknbrs_offset_[u]];
+    assert(Q.d_bknbrs_offset_ != nullptr);
+    assert(Q.d_bknbrs_ != nullptr);
+    assert(u >= 0 && u < *Q.d_vcount_);
+    int o_ = Q.d_bknbrs_offset_[u];
+    int fuu = Q.d_bknbrs_[o_];
+    assert(fuu >= 0 && fuu < *Q.d_vcount_);
     assert(Q.d_bknbrs_offset_[u] <= Q.d_bknbrs_offset_[u + 1]);
     int fvv = this_partial_matching[d_rank[fuu]];
     int flen = 0;
@@ -96,13 +101,18 @@ int join_bfs(
     }
     CHECK(cudaMalloc(&d_rank, sizeof(int) * matching_order.size()));
     CHECK(cudaMemcpy(d_rank, h_rank.data(), sizeof(int) * matching_order.size(), cudaMemcpyHostToDevice));
+    printf("rank: ");
+    for (int i = 0; i < h_rank.size(); i++) {
+        printf("%d ", h_rank[i]);
+    }
+    printf("\n");
 
     for (int partial_matching_len = 2; partial_matching_len < matching_order.size(); partial_matching_len++) {
         printf("partial matching length: %d\n", partial_matching_len);
         print_partial_results<<<1, 1>>>(d_partial_matchings, partial_matching_len, partial_matching_cnt);
         CHECK(cudaDeviceSynchronize());
         int *d_new_partial_matchings = nullptr;
-        CHECK(cudaMalloc(&d_new_partial_matchings, 100000000));
+        CHECK(cudaMalloc(&d_new_partial_matchings, 1024 * 1024 * 1024));
 
         CHECK(cudaMemcpyToSymbol(d_prealloc_cnt, &Zero, sizeof(int)));
 

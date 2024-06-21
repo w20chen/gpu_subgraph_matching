@@ -157,6 +157,9 @@ public:
             }
         }
         bknbrs_offset_[vcount_] = bknbrs_.size();
+
+        assert(bknbrs_offset_.size() != 0);
+        assert(bknbrs_.size() != 0);
     }
 
     void generate_matching_order(std::vector<int> &matching_order) const;
