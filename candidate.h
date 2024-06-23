@@ -20,6 +20,10 @@ public:
     int *h_cg_offset;
 
     candidate_graph(Graph &Q, Graph &G);
+
+    ~candidate_graph() {
+        free(h_cg_offset);
+    }
 };
 
 
@@ -28,8 +32,8 @@ public:
     int *d_cand_set;
     int *d_cand_offset;
 
-    int *d_query_vertex_cnt;
-    int *d_data_vertex_cnt;
+    int query_vertex_cnt;
+    int data_vertex_cnt;
 
     int *d_cg_offset;
     int *d_cg_array;
@@ -37,11 +41,8 @@ public:
 public:
     candidate_graph_GPU(const candidate_graph &cg) {
         int V = cg.query_vertex_cnt;
-        CHECK(cudaMalloc(&d_query_vertex_cnt, sizeof(int)));
-        CHECK(cudaMemcpy(d_query_vertex_cnt, &V, sizeof(int), cudaMemcpyHostToDevice));
-        int V_ = cg.data_vertex_cnt;
-        CHECK(cudaMalloc(&d_data_vertex_cnt, sizeof(int)));
-        CHECK(cudaMemcpy(d_data_vertex_cnt, &V_, sizeof(int), cudaMemcpyHostToDevice));
+        this->query_vertex_cnt = cg.query_vertex_cnt;
+        this->data_vertex_cnt = cg.data_vertex_cnt;
 
         int *h_cand_offset = (int *)malloc(sizeof(int) * (V + 1));
         h_cand_offset[0] = 0;
@@ -67,20 +68,28 @@ public:
         CHECK(cudaMemcpy(d_cg_offset, cg.h_cg_offset, _offset_size, cudaMemcpyHostToDevice));
 
         std::cout << "Total num of vertices in candidate_graph: " << cg.h_cg_array.size() << std::endl;
+        free(h_cand_offset);
     }
 
-    __device__ __inline__ int d_u_pair_key(int u1, int u2) const {
-        return u1 * *d_query_vertex_cnt + u2;
+    __device__ __forceinline__ int d_u_pair_key(int u1, int u2) const {
+        return u1 * this->query_vertex_cnt + u2;
     }
 
     __device__ int *d_get_candidates(int u1, int u2, int v, int &len) const {
         // when u1 is mapped to v, what are the candidates of u2 ?
-        int *start = d_cg_offset + d_u_pair_key(u1, u2) * *d_data_vertex_cnt;
+        int *start = d_cg_offset + d_u_pair_key(u1, u2) * this->data_vertex_cnt;
         len = start[v + 1] - start[v];
         assert(start[v] >= 0);
         assert(start[v + 1] >= 0);
         assert(len >= 0);
         return d_cg_array + start[v];
+    }
+
+    void deallocate() {
+        CHECK(cudaFree(d_cand_set));
+        CHECK(cudaFree(d_cand_offset));
+        CHECK(cudaFree(d_cg_offset));
+        CHECK(cudaFree(d_cg_array));
     }
 };
 
