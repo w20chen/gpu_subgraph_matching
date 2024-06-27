@@ -4,6 +4,7 @@
 #include "graph_gpu.h"
 #include "candidate.h"
 #include "join.h"
+#include "mem_manager.h"
 
 
 void __global__ BFS_Extend(

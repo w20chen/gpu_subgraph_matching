@@ -137,4 +137,24 @@ print_partial_results(int* head, int col, int row) {
     printf("\n");
 }
 
+void check_gpu_props() {
+    int deviceCount = 0;
+    cudaGetDeviceCount(&deviceCount);  
+
+    if (deviceCount == 0) {  
+        fprintf(stderr, "No CUDA devices available.\n");  
+        assert(deviceCount != 0);
+    }
+
+    int dev = 0;
+    cudaGetDevice(&dev);
+    cudaDeviceProp prop;
+    if (cudaGetDeviceProperties(&prop, dev) == cudaSuccess) {  
+        printf("Device %d: \"%s\"\n", dev, prop.name);  
+        printf("Total global mem: %.2f MBytes\n", (float)prop.totalGlobalMem / 1048576.0f);  
+        printf("Max threads per block: %d\n", prop.maxThreadsPerBlock);  
+        printf("Compute capability: %d.%d\n", prop.major, prop.minor);  
+    }
+}
+
 #endif

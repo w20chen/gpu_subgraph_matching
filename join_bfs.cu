@@ -1,17 +1,13 @@
 #include "join_bfs.h"
 #include "join.h"
 
-__device__ int d_prealloc_cnt;
 
 
 void __global__ BFS_Extend(
     const Graph_GPU Q,
     const Graph_GPU G,
     const candidate_graph_GPU cg,
-    int partial_matching_cnt,
-    int partial_matching_len,
-    int *d_head,
-    int *d_new_head,
+    const MemManager MM,
     int cur_query_vertex,
     int *d_rank
 ) {
@@ -21,12 +17,12 @@ void __global__ BFS_Extend(
     int lane_id = tid % warpSize;
 
     int u = cur_query_vertex;
-    int *this_partial_matching = d_head + partial_matching_len * warp_id;
+    int *this_partial_matching = MM.get_this_partial_matching(warp_id);
 
-    if (warp_id >= partial_matching_cnt) {
+    if (this_partial_matching == nullptr) {
         return;
     }
-
+ 
     // find first backward neighbor fuu of u
     assert(Q.d_bknbrs_offset_ != nullptr);
     assert(Q.d_bknbrs_ != nullptr);
@@ -38,6 +34,8 @@ void __global__ BFS_Extend(
     int fvv = this_partial_matching[d_rank[fuu]];
     int flen = 0;
     int *fset = cg.d_get_candidates(fuu, u, fvv, flen);
+
+    int *d_new_head = nullptr;
 
     // compute extendable candidate set
     for (int _i = lane_id; _i < flen; _i += warpSize) {
@@ -62,6 +60,17 @@ void __global__ BFS_Extend(
         }
         // v is good
         if (flag) {
+            if (lane_id == 0) {
+                if (MM.blk_valid(warp_id)) {
+                    d_new_head = MM.get_blk(warp_id);
+                }
+                else {
+                    d_new_head = MM.alloc_blk(warp_id);
+                }
+            }
+
+            __syncwarp();
+
             int old_prealloc_cnt = atomicAdd(&d_prealloc_cnt, 1);
             int idx = old_prealloc_cnt * (partial_matching_len + 1) + partial_matching_len;
             d_new_head[idx] = v;
@@ -71,6 +80,7 @@ void __global__ BFS_Extend(
             }
         }
     }
+    MM.save_new(d_new_head, partial_matching_len, );
 }
 
 

@@ -18,6 +18,9 @@ int main(int argc, char **argv) {
     std::string input_query_graph_file = cmd_parser.get_cmd_option("-q");
     std::string input_data_graph_file = cmd_parser.get_cmd_option("-d");
 
+    cudaSetDevice(0);
+    check_gpu_props();
+
     Graph Q(input_query_graph_file, true);
     Graph G(input_data_graph_file, false);
 
@@ -33,6 +36,10 @@ int main(int argc, char **argv) {
 
     int ret = join_bfs(Q, G, Q_GPU, G_GPU, CG, CG_GPU, matching_order);
     printf("\033[41;37mResult: %d\033[0m\n", ret);
+
+    Q_GPU.deallocate();
+    G_GPU.deallocate();
+    CG_GPU.deallocate();
 
     return 0;
 }
