@@ -11,6 +11,7 @@ struct partial_props {
 
 class MemManager {
     MemPool MP;
+    int **warp_blk;
 
 public:
     partial_props *props;
@@ -29,7 +30,12 @@ public:
         blk_ptrs = nullptr;
     }
 
+    void init(int *head, int *partial_len, int *partial_cnt) {
+        
+    }
+
     void alloc(int warpNum) {
+        CHECK(cudaMalloc(&warp_blk, sizeof(int *) * warpNum));
         CHECK(cudaMalloc(&new_props, sizeof(partial_props) * warpNum));
         new_props_len = warpNum;
         CHECK(cudaMalloc(&blk_ptrs, sizeof(int) * warpNum));
@@ -58,12 +64,14 @@ public:
         props_len = new_props_len;
     }
 
-    int *get_blk() {
-
+    __device__ int *get_blk(int warp_id) {
+        return warp_blk[warp_id];
     }
 
-    int *alloc_blk() {
-
+    __device__ int *alloc_blk(int warp_id) {
+        int *blk_addr = alloc();
+        warp_blk[warp_id] = blk_addr;
+        return blk_addr;
     }
 };
 

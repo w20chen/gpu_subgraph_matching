@@ -80,7 +80,7 @@ void __global__ BFS_Extend(
             }
         }
     }
-    MM.save_new(d_new_head, partial_matching_len, );
+    MM.save_new(d_new_head, partial_matching_len);
 }
 
 

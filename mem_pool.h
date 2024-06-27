@@ -10,7 +10,7 @@
 class MemPool {
     void *head;
 
-    const int blockSize = 4 * 1024;
+    const int blockSize = 4 * 1024;     // # of bytes
     const int blockNum = 200;
 
     int **freeList;
