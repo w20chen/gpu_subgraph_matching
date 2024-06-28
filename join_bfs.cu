@@ -80,7 +80,12 @@ void __global__ BFS_Extend(
             }
         }
     }
-    MM.save_new(d_new_head, partial_matching_len);
+
+    __syncthreads();
+
+    if (tid == 0) {
+        MM.save_new(d_new_head, partial_matching_len);
+    }
 }
 
 
