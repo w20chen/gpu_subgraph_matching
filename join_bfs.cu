@@ -40,7 +40,7 @@ void __global__ BFS_Extend(
     if (lane_id == 0) {
         d_new_head = MM.MP.alloc();
     }
-    __shfl_sync(0xffffffff, d_new_head, 0, 64);
+    __shfl_sync(0xffffffff, d_new_head, 0);
     assert(d_new_head != nullptr);
 
     // compute extendable candidate set

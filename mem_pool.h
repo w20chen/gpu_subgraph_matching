@@ -58,7 +58,7 @@ public:
         atomicExch(&lock, 0);
     }
 
-    __device__ __forceinline__ int *alloc() {   // mutex ?
+    __device__ __forceinline__ int *alloc() {
         if (listBack == 0) {
             return nullptr;
         }

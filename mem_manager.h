@@ -9,6 +9,8 @@ struct partial_props {
     int partial_cnt;
 };
 
+int warp_block[1024][4];    // not used
+
 class MemManager {
     MemPool MP;
 
