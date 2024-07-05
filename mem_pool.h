@@ -10,15 +10,20 @@
 class MemPool {
     void *head;
 
-    const int blockSize = 4 * 1024;     // # of bytes
-    const int blockNum = 200;
-
     int **freeList;
     bool *isFree;
     int listBack;
 
+    int lock;       // 0,1
+
 public:
+    const int blockSize = 4 * 1024;         // # of bytes
+    const int blockIntNum = blockSize / 4;  // # of int
+    const int blockNum = 200;
+
     MemPool() {
+        lock = 0;
+
         assert(sizeof(char) == 1);
         assert(sizeof(int) == 4);
         assert(sizeof(void *) == 8);
@@ -44,7 +49,15 @@ public:
         free(h_freeList);
     }
 
-    __device__ __forceinline__ int *alloc() {
+    __device__ void lock_mutex() {
+        while (atomicCAS(&lock, 0, 1) != 0);
+    }
+
+    __device__ void unlock_mutex() {
+        atomicExch(&lock, 0);
+    }
+
+    __device__ __forceinline__ int *alloc() {   // mutex ?
         if (listBack == 0) {
             return nullptr;
         }

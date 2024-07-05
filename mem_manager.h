@@ -11,7 +11,6 @@ struct partial_props {
 
 class MemManager {
     MemPool MP;
-    int **warp_blk;
 
 public:
     partial_props *props;
@@ -20,58 +19,99 @@ public:
     partial_props *new_props;
     int new_props_len;
 
-    int *blk_ptrs;
+    int *blk_wcnt;
 
     MemManager() {
         props = nullptr;
         props_len = 0;
         new_props = nullptr;
         new_props_len = 0;
-        blk_ptrs = nullptr;
+        blk_wcnt = nullptr;
     }
 
-    void init(int *head, int *partial_len, int *partial_cnt) {
-        
+    void init(int *head, int partial_len, int partial_cnt) {
+        partial_props *h_props = nullptr;
+
+        int num_per_blk = MP.blockSize / (partial_len * sizeof(int));
+        int blk_num = (partial_cnt + num_per_blk - 1) / num_per_blk;
+        h_props = (partial_props *)malloc(sizeof(partial_props) * blk_num);
+
+        for (int i = 0; i < blk_num; i++) {
+            h_props[i].blk_addr = head + partial_len * i;
+            h_props[i].partial_len = partial_len;
+            h_props[i].partial_cnt = num_per_blk;
+        }
+        h_props[blk_num].partial_cnt = partial_cnt - (num_per_blk * blk_num);
+
+        props_len = blk_num;
+        CHECK(cudaMalloc(&props, props_len * sizeof(partial_props)));
+        CHECK(cudaMemcpy(props, h_props, props_len * sizeof(partial_props)));
+
+        printf("Mempool initialized with beginning partial matchings.\n");
+        printf("num of memblk: %d\n", props_len);
+
+        int *h_blk_wcnt = (int *)malloc(sizeof(int) * blk_num);
+        for (int i = 0; i < blk_num; i++) {
+            h_blk_wcnt[i] = 0;
+        }
+        CHECK(cudaMalloc(&blk_wcnt, sizeof(int) * blk_num));
+        CHECK(cudaMemcpy(blk_wcnt, h_blk_wcnt, sizeof(int) * blk_num));
+
+        free(h_props);
+        free(h_blk_wcnt);
+
+        CHECK(cudaMalloc(&props, sizeof(int) * blk_num));
+        new_props_len = blk_num;
     }
 
-    void alloc(int warpNum) {
-        CHECK(cudaMalloc(&warp_blk, sizeof(int *) * warpNum));
-        CHECK(cudaMalloc(&new_props, sizeof(partial_props) * warpNum));
-        new_props_len = warpNum;
-        CHECK(cudaMalloc(&blk_ptrs, sizeof(int) * warpNum));
-    }
-
-    __device__ int *get_this_partial_matching(int warp_id) {
+    __device__ int *get_partial(int warp_id) {
         int cnt = 0;
         for (int i = 0; i < props_len; i++) {
             partial_props p = props[i];
             cnt += p.partial_cnt;
             if (cnt > warp_id) {
-                return p.blk_addr + (warp_id - cnt + p.partial_cnt) * p.len * sizeof(int);
+                return p.blk_addr + (warp_id - cnt + p.partial_cnt) * p.len;
             }
         }
         return nullptr;
     }
 
-    __device__ bool blk_valid() {
-        return true;
-    }
-
-    void reset() {
-        CHECK(cudaFree(props));
-        CHECK(cudaFree(blk_ptrs));
+    void update() {
+        partial_props *tmp = props;
         props = new_props;
-        props_len = new_props_len;
+        new_props = tmp;
+
+        // reset blk_wcnt
+        int *h_blk_wcnt = (int *)malloc(sizeof(int) * blk_num);
+        for (int i = 0; i < blk_num; i++) {
+            h_blk_wcnt[i] = 0;
+        }
+        CHECK(cudaMalloc(&blk_wcnt, sizeof(int) * blk_num));
+        CHECK(cudaMemcpy(blk_wcnt, h_blk_wcnt, sizeof(int) * blk_num));
+        free(h_blk_wcnt);
     }
 
-    __device__ int *get_blk(int warp_id) {
-        return warp_blk[warp_id];
+    void deallocate() {
+        if (blk_wcnt) {
+            CHECK(cudaFree(blk_wcnt));
+            blk_wcnt = nullptr;
+        }
+        if (props) {
+            CHECK(cudaFree(props));
+            props = nullptr;
+        }
+        if (new_props) {
+            CHECK(cudaFree(new_props));
+            new_props = nullptr;
+        }
     }
 
-    __device__ int *alloc_blk(int warp_id) {
-        int *blk_addr = alloc();
-        warp_blk[warp_id] = blk_addr;
-        return blk_addr;
+    __global__ int new_partial_cnt(int blk_num) {
+        int cnt = 0;
+        for (int i = 0; i < blk_num; i++) {
+            cnt += blk_wcnt[i];
+        }
+        return cnt;
     }
 };
 
