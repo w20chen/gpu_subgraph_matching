@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <assert.h>
+#include <cstdlib>
 #include "helper.h"
 
 
@@ -45,8 +46,8 @@ public:
 
         listBack = blockNum;
 
-        free(h_isFree);
-        free(h_freeList);
+        // free(h_isFree);
+        // free(h_freeList);
     }
 
     __device__ void lock_mutex() {

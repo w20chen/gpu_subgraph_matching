@@ -130,7 +130,7 @@ int join_bfs(
         int threadBlocks = (partial_matching_cnt + warpsPerBlock - 1) / warpsPerBlock;
         BFS_Extend<<<threadBlocks, threadsPerBlock>>>(Q, G, cg, MM, matching_order[partial_matching_len], d_rank);
 
-        partial_matching_cnt = MM.new_partial_cnt<<<1, 1>>>();
+        partial_matching_cnt = MM.new_partial_cnt();
         MM.update();
 
         CHECK(cudaDeviceSynchronize());

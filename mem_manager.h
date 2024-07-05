@@ -106,11 +106,17 @@ public:
         }
     }
 
-    __global__ int new_partial_cnt(int blk_num) {
+    int new_partial_cnt() {
+        int blk_num = props_len;
+
+        int *h_blk_wcnt = (int *)malloc(sizeof(int) * blk_num);
+        CHECK(cudaMemcpy(h_blk_wcnt, blk_wcnt, sizeof(int) * blk_num, cudaMemcpy));
+
         int cnt = 0;
         for (int i = 0; i < blk_num; i++) {
-            cnt += blk_wcnt[i];
+            cnt += h_blk_wcnt[i];
         }
+        free(h_blk_wcnt);
         return cnt;
     }
 };
