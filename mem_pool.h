@@ -9,18 +9,16 @@
 
 
 class MemPool {
-    void *head;
-
-    int **freeList;
-    bool *isFree;
-    int listBack;
-
-    int lock;       // 0,1
+    int *head;              // starting address of memory pool
+    int *nextAddr;          // address of next available block
+    int *nextAddrBound;     // upper bound of nextAddr
+    int lock;               // 0, 1
 
 public:
-    const int blockSize = 4 * 1024;         // # of bytes
-    const int blockIntNum = blockSize / 4;  // # of int
-    const int blockNum = 200;
+    const int blockSize = 4 * 1024;                     // # of bytes within a block
+    const int blockNum = 500;                           // # of memory blocks
+    const int blockIntNum = blockSize / sizeof(int);    // # of integers within a block
+    const int poolSize = blockNum * blockSize;          // # of bytes within a mempool
 
     MemPool() {
         lock = 0;
@@ -28,75 +26,43 @@ public:
         assert(sizeof(char) == 1);
         assert(sizeof(int) == 4);
         assert(sizeof(void *) == 8);
+        assert(sizeof(unsigned long long) == 8);
 
-        CHECK(cudaMalloc(&head, blockNum * blockSize));
-        CHECK(cudaMalloc(&freeList, sizeof(int *) * blockNum));
-        CHECK(cudaMalloc(&isFree, sizeof(bool) * blockNum));
+        CHECK(cudaMalloc(&head, poolSize));
+        CHECK(cudaMemset(head, -1, poolSize));
 
-        int **h_freeList = (int **)malloc(sizeof(int *) * blockNum);
-        bool *h_isFree = (bool *)malloc(sizeof(bool) * blockNum);
-
-        for (int i = 0; i < blockNum; i++) {
-            h_isFree[i] = true;
-            h_freeList[i] = (int *)((char *)head + i * blockSize);
-        }
-
-        CHECK(cudaMemcpy(freeList, h_freeList, sizeof(int *) * blockNum, cudaMemcpyHostToDevice));
-        CHECK(cudaMemcpy(isFree, h_isFree, sizeof(bool) * blockNum, cudaMemcpyHostToDevice));
-
-        listBack = blockNum;
-
-        // free(h_isFree);
-        // free(h_freeList);
-    }
-
-    __device__ void lock_mutex() {
-        while (atomicCAS(&lock, 0, 1) != 0);
-    }
-
-    __device__ void unlock_mutex() {
-        atomicExch(&lock, 0);
+        nextAddr = head;
+        nextAddrBound = head + blockNum * blockIntNum;
     }
 
     __device__ __forceinline__ int *alloc() {
-        if (listBack == 0) {
+        if (nextAddr >= nextAddrBound) {
+            printf("No more available block in mempool\n");
             return nullptr;
         }
-        assert(listBack > 0 && listBack <= blockNum);
-        int *addr = freeList[listBack - 1];
-        listBack -= 1;
 
-        assert(head <= (void *)addr);
-        int index = ((char *)addr - (char *)head) / blockSize;
-        assert(isFree[index] == true);
-        isFree[index] = false;
+        unsigned long long ull_nextAddr = (unsigned long long)nextAddr;
+        unsigned long long ull_addr = atomicAdd(&ull_nextAddr, (unsigned long long)blockSize);
+
+        return (int *)ull_addr;
+    }
+
+    __host__ int *h_alloc() {
+        int *addr = nextAddr;
+        nextAddr += blockIntNum;
         return addr;
     }
 
-    __device__ __forceinline__ void free(int *addr) {
-        assert(addr != nullptr);
-        assert(addr >= head);
-        assert((char *)addr < (char *)head + blockNum * blockSize);
-        assert(((char *)addr - (char *)head) % blockSize == 0);
-
-        assert(listBack >= 0 && listBack < blockNum);
-        freeList[listBack] = addr;
-        listBack += 1;
-
-        int index = ((char *)addr - (char *)head) / blockSize;
-        assert(isFree[index] == false);
-        isFree[index] = true;
+    __host__ void freeAll() {
+        nextAddr = head;
     }
 
     __device__ void print_meta() {
-        printf("mempool starts at %p.\n", head);
-        printf("num of available blocks: %d.\n", listBack);
+        assert(0);
     }
 
     void deallocate() {
         CHECK(cudaFree(head));
-        CHECK(cudaFree(isFree));
-        CHECK(cudaFree(freeList));
     }
 };
 

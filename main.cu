@@ -7,7 +7,6 @@
 #include "graph.h"
 #include "graph_gpu.h"
 #include "candidate.h"
-#include "join.h"
 #include "join_bfs.h"
 
 

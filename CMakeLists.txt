@@ -15,7 +15,7 @@ set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -O3")
 
 add_library(graph_objects SHARED graph.cu graph.h graph_gpu.h)
 add_library(candidate_objects SHARED candidate.cu candidate.h)
-add_library(join_objects SHARED join_bfs.cu join_bfs.h join.cu join.h)
+add_library(join_objects SHARED join_bfs.cu join_bfs.h)
 
 set_target_properties(graph_objects PROPERTIES
     CUDA_ARCHITECTURES "70"

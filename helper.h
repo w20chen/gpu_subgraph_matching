@@ -68,6 +68,10 @@ static void TODO() {
     assert(0);
 }
 
+static void ERROR() {
+    printf("Error!\n");
+    assert(0);
+}
 
 class InputParser {
 public:
@@ -155,6 +159,20 @@ void check_gpu_props() {
         printf("Max threads per block: %d\n", prop.maxThreadsPerBlock);  
         printf("Compute capability: %d.%d\n", prop.major, prop.minor);  
     }
+}
+
+int ceil_div(int a, int b) {
+    return (a - b + 1) / b;
+}
+
+void print_array(int *arr, int len) {
+    if (len > 100) {
+        len = 100;
+    }
+    for (int i = 0; i < len; i++) {
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
 }
 
 #endif

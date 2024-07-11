@@ -1,6 +1,6 @@
 #include "graph.h"
 
-void Graph::generate_matching_order(std::vector<int> &matching_order) const
+void Graph::generate_matching_order(std::vector<int>& matching_order) const
 {
     assert(is_query_);
     int n = vcount_;
@@ -73,7 +73,7 @@ void Graph::generate_matching_order(std::vector<int> &matching_order) const
                 int cur_count = 0;
                 for (auto uu : matching_order)
                 {
-                    auto &uun = adj_[uu];
+                    auto& uun = adj_[uu];
                     std::vector<int> uun_tmp;
                     uun_tmp.insert(uun_tmp.end(), uun.begin(), uun.end());
 
@@ -172,7 +172,8 @@ void Graph::generate_matching_order(std::vector<int> &matching_order) const
     }
 
     std::cout << "matching order: ";
-    for (auto v : matching_order) {
+    for (auto v : matching_order)
+    {
         std::cout << v << " ";
     }
     std::cout << std::endl;
