@@ -35,7 +35,8 @@ public:
         blockIntNum = first_mem_pool.blockIntNum;
     }
 
-    void init(int *partial_matching_addr, int partial_matching_cnt, int partial_matching_len = 2) {
+    __host__ void
+    init(int *partial_matching_addr, int partial_matching_cnt, int partial_matching_len = 2) {
         current_props_array_id = 1;
 
         int partial_matching_num_per_blk = blockIntNum / partial_matching_len;
@@ -124,7 +125,7 @@ public:
         else assert(0);
     }
 
-    __device__ int *get_partial(int warp_id) {
+    __device__ int *get_partial(int warp_id, int *partial_matching_len) {
         partial_props *props = nullptr;
         int props_len = 0;
         if (current_props_array_id == 1) {
@@ -142,9 +143,11 @@ public:
             partial_props p = props[i];
             cnt += p.partial_cnt;
             if (cnt > warp_id) {
+                *partial_matching_len = p.partial_len;
                 return p.start_addr + (warp_id - cnt + p.partial_cnt) * p.partial_len;
             }
         }
+        *partial_matching_len = 0;
         return nullptr;
     }
 
@@ -159,13 +162,17 @@ public:
     }
 
     __device__ void add_new_props(partial_props props) {
+        assert(props.partial_cnt > 0);
         if (current_props_array_id == 1) {
             int old = atomicAdd(&second_props_array_len, 1);
+            assert(old != second_props_array_len);
             second_props_array[old] = props;
+            // printf("second_props_array length: %d\n", second_props_array_len);
         }
         else if (current_props_array_id == 2) {
             int old = atomicAdd(&first_props_array_len, 1);
             first_props_array[old] = props;
+            // printf("first_props_array length: %d\n", first_props_array_len);
         }
         else assert(0);
     }

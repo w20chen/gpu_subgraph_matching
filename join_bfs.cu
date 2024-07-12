@@ -43,7 +43,7 @@ void __global__ BFS_Extend(
     const Graph_GPU Q,
     const Graph_GPU G,
     const candidate_graph_GPU cg,
-    MemManager MM,
+    MemManager *d_MM,
     int cur_query_vertex,
     int *d_rank
 ) {
@@ -55,14 +55,14 @@ void __global__ BFS_Extend(
 
     // assign partial matching to each warp
     int u = cur_query_vertex;
-    int *this_partial_matching = MM.get_partial(warp_id);
-    partial_props *props = MM.get_partial_props(warp_id);
-    assert(props);
-    int partial_matching_len = props->partial_len;
+    int partial_matching_len = 0;
+    int *this_partial_matching = d_MM->get_partial(warp_id, &partial_matching_len);
 
     if (this_partial_matching == nullptr) {
         return;
     }
+
+    assert(partial_matching_len >= 2);
 
     // find first backward neighbor fuu of u
     assert(Q.d_bknbrs_offset_ != nullptr);
@@ -79,7 +79,7 @@ void __global__ BFS_Extend(
     unsigned d_new_head_lower = 0;
     unsigned d_new_head_upper = 0;
     if (lane_id == 0) {
-        d_new_head = MM.write_mempool()->alloc();
+        d_new_head = d_MM->write_mempool()->alloc();
         assert(d_new_head != 0);
         d_new_head_lower = (unsigned)d_new_head;
         // printf("%u %p\n", d_new_head_lower, d_new_head);
@@ -95,7 +95,7 @@ void __global__ BFS_Extend(
 
     assert(d_new_head_upper != 0);
     assert(d_new_head != nullptr);
-    // printf("%p\n", d_new_head);      // something like 0x7f19d3c00000
+    // printf("%p\n", d_new_head);      // 0x7f19d3c00000
 
     // block writing counter for each warp
     extern __shared__ int blk_write_cnt[];
@@ -125,7 +125,7 @@ void __global__ BFS_Extend(
         // v is good
         if (flag) {
             int old_cnt = atomicAdd(&blk_write_cnt[warp_id_in_blk], 1);
-            if ((old_cnt + 1) * (partial_matching_len + 1) > MM.blockIntNum) {
+            if ((old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum) {
                 blk_write_cnt[warp_id_in_blk] = 0;
                 assert(0);
             }
@@ -142,14 +142,18 @@ void __global__ BFS_Extend(
     __syncthreads();
 
     if (lane_id == 0) {
-        if (blk_write_cnt[warp_id] != 0) {
+        if (blk_write_cnt[warp_id_in_blk] != 0) {
             partial_props p;
             p.start_addr = d_new_head;
             p.partial_len = partial_matching_len + 1;
-            p.partial_cnt = blk_write_cnt[warp_id];
-            MM.add_new_props(p);
+            p.partial_cnt = blk_write_cnt[warp_id_in_blk];
+            d_MM->add_new_props(p);
+            // (0x7f9071c00000,3,2)
+            // printf("(%p,%d,%d)\n", p.start_addr, p.partial_len, p.partial_cnt);
         }
     }
+
+    __syncthreads();
 }
 
 
@@ -166,11 +170,14 @@ int join_bfs(
     int partial_matching_cnt = 0;
     int *d_partial_matchings = set_beginning_partial_matchings(q, g, _cg, matching_order, partial_matching_cnt);
 
-    MemManager MM;
+    MemManager h_MM;
     // Move a table of initial partial matchings (candidate edges) to memory pool.
-    MM.init(d_partial_matchings, partial_matching_cnt);
+    h_MM.init(d_partial_matchings, partial_matching_cnt);
 
     CHECK(cudaFree(d_partial_matchings));
+
+    MemManager *d_MM = nullptr;
+    CHECK(cudaMalloc(&d_MM, sizeof(MemManager)));
 
     const int threadsPerBlock = 512;
     const int warpsPerBlock = threadsPerBlock / 32;
@@ -193,20 +200,22 @@ int join_bfs(
     for (int partial_matching_len = 2; partial_matching_len < matching_order.size(); partial_matching_len++) {
         printf("partial matching length: %d\n", partial_matching_len);
 
-        int partial_matching_cnt = MM.get_partial_cnt();
+        int partial_matching_cnt = h_MM.get_partial_cnt();
         printf("cnt: %d\n", partial_matching_cnt);
+
+        CHECK(cudaMemcpy(d_MM, &h_MM, sizeof(MemManager), cudaMemcpyHostToDevice));
 
         // For each partial matching, assign a warp.
         int threadBlocks = ceil_div(partial_matching_cnt, warpsPerBlock);
-        BFS_Extend<<<threadBlocks, threadsPerBlock, warpsPerBlock>>>(Q, G, cg, MM, matching_order[partial_matching_len], d_rank);
+        BFS_Extend<<<threadBlocks, threadsPerBlock, warpsPerBlock>>>(Q, G, cg, d_MM, matching_order[partial_matching_len], d_rank);
 
         CHECK(cudaDeviceSynchronize());
 
-        MM.swap_mem_pool();
-
+        CHECK(cudaMemcpy(&h_MM, d_MM, sizeof(MemManager), cudaMemcpyDeviceToHost));
+        h_MM.swap_mem_pool();
         CHECK(cudaDeviceSynchronize());
     }
 
-    int ret = MM.get_partial_cnt();
+    int ret = h_MM.get_partial_cnt();
     return ret;
 }
