@@ -80,8 +80,8 @@ public:
         }
 
         // CHECK(cudaMalloc(&first_props_array, sizeof(partial_props) * need_blk_num));
-        CHECK(cudaMalloc(&first_props_array, sizeof(partial_props) * 1024 * 32));
-        CHECK(cudaMalloc(&second_props_array, sizeof(partial_props) * 1024 * 32));
+        CHECK(cudaMalloc(&first_props_array, sizeof(partial_props) * 1024 * 1024));
+        CHECK(cudaMalloc(&second_props_array, sizeof(partial_props) * 1024 * 1024));
 
         CHECK(cudaMemcpy(first_props_array, h_first_props_array, sizeof(partial_props) * need_blk_num, cudaMemcpyHostToDevice));
 
@@ -160,12 +160,12 @@ public:
 
     __device__ void add_new_props(partial_props props) {
         if (current_props_array_id == 1) {
-            second_props_array[second_props_array_len] = props;
-            second_props_array_len += 1;
+            int old = atomicAdd(&second_props_array_len, 1);
+            second_props_array[old] = props;
         }
         else if (current_props_array_id == 2) {
-            first_props_array[first_props_array_len] = props;
-            first_props_array_len += 1;
+            int old = atomicAdd(&first_props_array_len, 1);
+            first_props_array[old] = props;
         }
         else assert(0);
     }

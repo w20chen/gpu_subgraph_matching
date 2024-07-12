@@ -203,6 +203,8 @@ int join_bfs(
         CHECK(cudaDeviceSynchronize());
 
         MM.swap_mem_pool();
+
+        CHECK(cudaDeviceSynchronize());
     }
 
     int ret = MM.get_partial_cnt();
