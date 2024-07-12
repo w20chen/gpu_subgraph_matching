@@ -162,7 +162,8 @@ void check_gpu_props() {
 }
 
 int ceil_div(int a, int b) {
-    return (a - b + 1) / b;
+    assert(b);
+    return (a + b - 1) / b;
 }
 
 void print_array(int *arr, int len) {

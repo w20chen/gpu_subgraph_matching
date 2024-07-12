@@ -33,11 +33,14 @@ public:
 
         nextAddr = head;
         nextAddrBound = head + blockNum * blockIntNum;
+        // printf("nextAddrBound: %p\n", nextAddrBound);    // something like 0x7f1de1df4000
     }
 
     __device__ __forceinline__ int *alloc() {
+        // printf("nextAddr: %p\n", nextAddr);              // something like 0x7f1de1c00000
         if (nextAddr >= nextAddrBound) {
             printf("No more available block in mempool\n");
+            assert(0);
             return nullptr;
         }
 

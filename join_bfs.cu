@@ -12,7 +12,7 @@ __host__ int *set_beginning_partial_matchings(
     int u1 = matching_order[1];
 
     assert(Q.is_adjacent(u0, u1));
-    std::vector<pint> h_beginning_partial_matching;
+    std::vector<std::pair<int, int>> h_beginning_partial_matching;
     for (int v0 : cg.cand[u0]) {
         for (int v1 : cg.cand[u1]) {
             if (G.is_adjacent(v0, v1)) {
@@ -26,11 +26,15 @@ __host__ int *set_beginning_partial_matchings(
     assert(beginning_partial_matching_cnt > 0);
 
     int *d_dst;
-    CHECK(cudaMalloc(&d_dst, sizeof(pint) * beginning_partial_matching_cnt));
-    CHECK(cudaMemcpy(d_dst, h_beginning_partial_matching.data(), sizeof(pint) * beginning_partial_matching_cnt, cudaMemcpyHostToDevice));
+    CHECK(cudaMalloc(&d_dst, sizeof(std::pair<int, int>) * beginning_partial_matching_cnt));
+    CHECK(cudaMemcpy(d_dst, h_beginning_partial_matching.data(), sizeof(std::pair<int, int>) * beginning_partial_matching_cnt, cudaMemcpyHostToDevice));
     printf("Beginning partial results moved to GPU.\n");
 
     cnt = beginning_partial_matching_cnt;
+
+    // Debug
+    printf("(%d,%d), (%d,%d), ...\n", h_beginning_partial_matching.at(0).first, h_beginning_partial_matching.at(0).second,
+        h_beginning_partial_matching.at(1).first, h_beginning_partial_matching.at(1).second);
     return d_dst;
 }
 
@@ -52,7 +56,6 @@ void __global__ BFS_Extend(
     // assign partial matching to each warp
     int u = cur_query_vertex;
     int *this_partial_matching = MM.get_partial(warp_id);
-    assert(this_partial_matching);
     partial_props *props = MM.get_partial_props(warp_id);
     assert(props);
     int partial_matching_len = props->partial_len;
@@ -64,10 +67,8 @@ void __global__ BFS_Extend(
     // find first backward neighbor fuu of u
     assert(Q.d_bknbrs_offset_ != nullptr);
     assert(Q.d_bknbrs_ != nullptr);
-    assert(u >= 0 && u < *Q.d_vcount_);
     int o_ = Q.d_bknbrs_offset_[u];
     int fuu = Q.d_bknbrs_[o_];
-    assert(fuu >= 0 && fuu < *Q.d_vcount_);
     assert(Q.d_bknbrs_offset_[u] <= Q.d_bknbrs_offset_[u + 1]);
     int fvv = this_partial_matching[d_rank[fuu]];
     int flen = 0;
@@ -75,20 +76,26 @@ void __global__ BFS_Extend(
 
     // allocate a memory block for each warp
     int *d_new_head = 0;
+    unsigned d_new_head_lower = 0;
+    unsigned d_new_head_upper = 0;
     if (lane_id == 0) {
         d_new_head = MM.write_mempool()->alloc();
+        assert(d_new_head != 0);
+        d_new_head_lower = (unsigned)d_new_head;
+        // printf("%u %p\n", d_new_head_lower, d_new_head);
+        d_new_head_upper = (unsigned)((unsigned long long)d_new_head >> 32);
     }
-    assert(d_new_head != nullptr);
 
-    unsigned d_new_head_lower = (unsigned)d_new_head;
-    unsigned d_new_head_upper = (unsigned)((unsigned long long)d_new_head >> 32);
-
-    __shfl_sync(0xffffffff, d_new_head_lower, 0);
-    __shfl_sync(0xffffffff, d_new_head_upper, 0);
+    d_new_head_lower = __shfl_sync(0xffffffff, d_new_head_lower, 0);
+    d_new_head_upper = __shfl_sync(0xffffffff, d_new_head_upper, 0);
 
     __syncwarp();
 
     d_new_head = (int *)(((unsigned long long)d_new_head_upper << 32) | (unsigned long long)d_new_head_lower);
+
+    assert(d_new_head_upper != 0);
+    assert(d_new_head != nullptr);
+    // printf("%p\n", d_new_head);      // something like 0x7f19d3c00000
 
     // block writing counter for each warp
     extern __shared__ int blk_write_cnt[];
@@ -135,11 +142,13 @@ void __global__ BFS_Extend(
     __syncthreads();
 
     if (lane_id == 0) {
-        partial_props p;
-        p.start_addr = d_new_head;
-        p.partial_len = partial_matching_len + 1;
-        p.partial_cnt = blk_write_cnt[warp_id];
-        MM.add_new_props(p);
+        if (blk_write_cnt[warp_id] != 0) {
+            partial_props p;
+            p.start_addr = d_new_head;
+            p.partial_len = partial_matching_len + 1;
+            p.partial_cnt = blk_write_cnt[warp_id];
+            MM.add_new_props(p);
+        }
     }
 }
 
@@ -184,9 +193,11 @@ int join_bfs(
     for (int partial_matching_len = 2; partial_matching_len < matching_order.size(); partial_matching_len++) {
         printf("partial matching length: %d\n", partial_matching_len);
 
-        // For each partial matching, assign a warp.
         int partial_matching_cnt = MM.get_partial_cnt();
-        int threadBlocks = (partial_matching_cnt + warpsPerBlock - 1) / warpsPerBlock;
+        printf("cnt: %d\n", partial_matching_cnt);
+
+        // For each partial matching, assign a warp.
+        int threadBlocks = ceil_div(partial_matching_cnt, warpsPerBlock);
         BFS_Extend<<<threadBlocks, threadsPerBlock, warpsPerBlock>>>(Q, G, cg, MM, matching_order[partial_matching_len], d_rank);
 
         CHECK(cudaDeviceSynchronize());
