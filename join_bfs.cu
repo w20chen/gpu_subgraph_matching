@@ -45,7 +45,8 @@ void __global__ BFS_Extend(
     const candidate_graph_GPU cg,
     MemManager *d_MM,
     int cur_query_vertex,
-    int *d_rank
+    int *d_rank,
+    int partial_offset
 ) {
 
     int tid = threadIdx.x + blockDim.x * blockIdx.x;
@@ -56,7 +57,7 @@ void __global__ BFS_Extend(
     // assign partial matching to each warp
     int u = cur_query_vertex;
     int partial_matching_len = 0;
-    int *this_partial_matching = d_MM->get_partial(warp_id, &partial_matching_len);
+    int *this_partial_matching = d_MM->get_partial(warp_id + partial_offset, &partial_matching_len);
 
     if (this_partial_matching == nullptr) {
         return;
@@ -145,7 +146,8 @@ void __global__ BFS_Extend(
 
             // allocate a new block for this warp
             if ((old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum) {
-                printf("tid: %d, old_cnt: %d, partial_matching_len: %d\n", tid, old_cnt, partial_matching_len);
+                // printf("tid: %d, old_cnt: %d, partial_matching_len: %d\n", tid, old_cnt, partial_matching_len);
+                // assert(0);
                 blk_write_cnt[warp_id_in_blk] = 0;
 
                 unsigned mask = __activemask();
@@ -258,11 +260,16 @@ int join_bfs(
 
         // For each partial matching, assign a warp.
         int totalBlocks = ceil_div(partial_matching_cnt, warpsPerBlock);
-        // for (int partial_offset = 0; partial_offset)
-        printf("call kernel <<<%d,%d,%d>>>\n", totalBlocks, threadsPerBlock, warpsPerBlock * sizeof(int));
-        BFS_Extend<<<totalBlocks, threadsPerBlock, warpsPerBlock * sizeof(int)>>>(Q, G, cg, d_MM, matching_order[partial_matching_len], d_rank);
+        const int maxBlocks = 2;
 
-        CHECK(cudaDeviceSynchronize());
+        for (int partial_offset = 0; partial_offset < partial_matching_cnt; partial_offset += maxBlocks * warpsPerBlock) {
+            printf("call kernel <<<%d, %d, %d>>>\n", maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int));
+            printf("partial_offset: %d\n", partial_offset);
+            BFS_Extend<<<maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int)>>>(
+                Q, G, cg, d_MM, matching_order[partial_matching_len], d_rank, partial_offset
+            );
+            CHECK(cudaDeviceSynchronize());
+        }
 
         CHECK(cudaMemcpy(&h_MM, d_MM, sizeof(MemManager), cudaMemcpyDeviceToHost));
         h_MM.swap_mem_pool();

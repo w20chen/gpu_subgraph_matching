@@ -10,17 +10,17 @@
 
 class MemPool {
     int *head;              // starting address of memory pool
-    // int *nextAddr;       // address of next available block
     int *nextAddrBound;     // upper bound of nextAddr
 
     union {
         int *val_int;
         unsigned long long val_ull; 
-    } nextAddr;
+    } 
+    nextAddr;               // address of next available block
 
 public:
-    const int blockSize = 4 * 1024;                     // # of bytes within a block
-    const int blockNum = 1000;                          // # of memory blocks within a mempool
+    const int blockSize = 128;                     // # of bytes within a block
+    const int blockNum = 1024 * 16;                          // # of memory blocks within a mempool
     const int blockIntNum = blockSize / sizeof(int);    // # of integers within a block
     const int poolSize = blockNum * blockSize;          // # of bytes within a mempool
 
@@ -29,6 +29,7 @@ public:
         assert(sizeof(int) == 4);
         assert(sizeof(void *) == 8);
         assert(sizeof(unsigned long long) == 8);
+        assert(sizeof(int *) == sizeof(unsigned long long));
 
         CHECK(cudaMalloc(&head, poolSize));
         CHECK(cudaMemset(head, -1, poolSize));
@@ -40,7 +41,8 @@ public:
 
     __device__ __forceinline__ int *alloc() {
         if (nextAddr.val_int >= nextAddrBound) {
-            printf("No more available block in mempool.\n");
+            printf("No more available block in mempool. nextAddrBound: %p, nextAddr: %p\n",
+                nextAddrBound, nextAddr.val_int);
             assert(0);
             return nullptr;
         }
