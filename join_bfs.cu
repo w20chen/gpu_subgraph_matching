@@ -80,17 +80,15 @@ void __global__ BFS_Extend(
     unsigned d_new_head_upper = 0;
     if (lane_id == 0) {
         d_new_head = d_MM->write_mempool()->alloc();
-        assert(d_new_head != 0);
+        assert(d_new_head != nullptr);
         d_new_head_lower = (unsigned)d_new_head;
         // printf("%u %p\n", d_new_head_lower, d_new_head);
         d_new_head_upper = (unsigned)((unsigned long long)d_new_head >> 32);
     }
-
+    __syncwarp();
     d_new_head_lower = __shfl_sync(0xffffffff, d_new_head_lower, 0);
     d_new_head_upper = __shfl_sync(0xffffffff, d_new_head_upper, 0);
-
     __syncwarp();
-
     d_new_head = (int *)(((unsigned long long)d_new_head_upper << 32) | (unsigned long long)d_new_head_lower);
 
     assert(d_new_head_upper != 0);
@@ -101,9 +99,23 @@ void __global__ BFS_Extend(
     extern __shared__ int blk_write_cnt[];
     blk_write_cnt[warp_id_in_blk] = 0;
 
+    __syncwarp();
+
     // compute extendable candidate set
-    for (int ii = lane_id; ii < flen; ii += warpSize) {
-        int v = fset[ii];
+    // for (int lid = lane_id; lid < flen; lid += warpSize) {
+    int ut = ceil_div(flen, warpSize);
+    for (int t = 0; t < ut; t++) {
+        int lid = t * warpSize + lane_id;
+        unsigned int loop_mask = 0;
+        __syncwarp();
+        loop_mask = __ballot_sync(0xffffffff, lid < flen);
+        // printf("%d loop mask: %p\n", lid, loop_mask);
+        __syncwarp();
+        if (lid >= flen) {
+            break;
+        }
+
+        int v = fset[lid];
         bool flag = true;
         // for each backward neighbor uu of u (except fuu)
         for (int ii = Q.d_bknbrs_offset_[u] + 1; ii < Q.d_bknbrs_offset_[u + 1]; ii++) {
@@ -122,27 +134,67 @@ void __global__ BFS_Extend(
                 flag = false;
             }
         }
+
+        __syncwarp(loop_mask);
+
+        // unsigned flag_mask = __ballot_sync(0xffffffff, flag);
+
         // v is good
         if (flag) {
             int old_cnt = atomicAdd(&blk_write_cnt[warp_id_in_blk], 1);
+
+            // allocate a new block for this warp
             if ((old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum) {
+                printf("tid: %d, old_cnt: %d, partial_matching_len: %d\n", tid, old_cnt, partial_matching_len);
                 blk_write_cnt[warp_id_in_blk] = 0;
-                assert(0);
+
+                unsigned mask = __activemask();
+                // printf("mask: %d\n", mask);  // 0xffffffff
+
+                int leader = __ffs(mask) - 1;
+                unsigned d_new_head_lower = 0;
+                unsigned d_new_head_upper = 0;
+                if (lid == leader) {
+                    // add new props
+                    partial_props p;
+                    p.start_addr = d_new_head;
+                    p.partial_len = partial_matching_len + 1;
+                    p.partial_cnt = old_cnt;
+                    d_MM->add_new_props(p);
+
+                    d_new_head = d_MM->write_mempool()->alloc();
+                    d_new_head_lower = (unsigned)d_new_head;
+                    d_new_head_upper = (unsigned)((unsigned long long)d_new_head >> 32);
+                }
+                __syncwarp(mask);
+                d_new_head_lower = __shfl_sync(0xffffffff, d_new_head_lower, 0);
+                d_new_head_upper = __shfl_sync(0xffffffff, d_new_head_upper, 0);
+                __syncwarp(mask);
+                d_new_head = (int *)(((unsigned long long)d_new_head_upper << 32) | (unsigned long long)d_new_head_lower);
+
+                old_cnt = atomicAdd(&blk_write_cnt[warp_id_in_blk], 1);
+                __syncwarp(mask);
             }
+
+            // __syncwarp(flag_mask);
+
             // write the newly found partial matching
             int idx = old_cnt * (partial_matching_len + 1) + partial_matching_len;
+            assert(idx < d_MM->blockIntNum && idx >= 0);
+            // printf("%d\n", idx);
             d_new_head[idx] = v;
             for (int i = 0; i < partial_matching_len; i++) {
                 idx = old_cnt * (partial_matching_len + 1) + i;
                 d_new_head[idx] = this_partial_matching[i];
             }
         }
+        __syncwarp(loop_mask);
     }
 
-    __syncthreads();
+    __syncthreads();    // important
 
     if (lane_id == 0) {
-        if (blk_write_cnt[warp_id_in_blk] != 0) {
+        if (blk_write_cnt[warp_id_in_blk] > 0) {
             partial_props p;
             p.start_addr = d_new_head;
             p.partial_len = partial_matching_len + 1;
@@ -152,8 +204,6 @@ void __global__ BFS_Extend(
             // printf("(%p,%d,%d)\n", p.start_addr, p.partial_len, p.partial_cnt);
         }
     }
-
-    __syncthreads();
 }
 
 
@@ -179,6 +229,7 @@ int join_bfs(
     MemManager *d_MM = nullptr;
     CHECK(cudaMalloc(&d_MM, sizeof(MemManager)));
 
+    // const int threadBlockNum = 1024;
     const int threadsPerBlock = 512;
     const int warpsPerBlock = threadsPerBlock / 32;
 
@@ -206,8 +257,10 @@ int join_bfs(
         CHECK(cudaMemcpy(d_MM, &h_MM, sizeof(MemManager), cudaMemcpyHostToDevice));
 
         // For each partial matching, assign a warp.
-        int threadBlocks = ceil_div(partial_matching_cnt, warpsPerBlock);
-        BFS_Extend<<<threadBlocks, threadsPerBlock, warpsPerBlock>>>(Q, G, cg, d_MM, matching_order[partial_matching_len], d_rank);
+        int totalBlocks = ceil_div(partial_matching_cnt, warpsPerBlock);
+        // for (int partial_offset = 0; partial_offset)
+        printf("call kernel <<<%d,%d,%d>>>\n", totalBlocks, threadsPerBlock, warpsPerBlock * sizeof(int));
+        BFS_Extend<<<totalBlocks, threadsPerBlock, warpsPerBlock * sizeof(int)>>>(Q, G, cg, d_MM, matching_order[partial_matching_len], d_rank);
 
         CHECK(cudaDeviceSynchronize());
 

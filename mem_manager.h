@@ -109,6 +109,7 @@ public:
             return &first_mem_pool;
         }
         else assert(0);
+        return nullptr;
     }
 
     __host__ void swap_mem_pool() {
@@ -159,6 +160,7 @@ public:
             return second_props_array + warp_id;
         }
         else assert(0);
+        return nullptr;
     }
 
     __device__ void add_new_props(partial_props props) {
@@ -188,6 +190,7 @@ public:
                 ret += h_props[i].partial_cnt;
             }
             free(h_props);
+            printf("first_props_array length: %d\n", first_props_array_len);
             return ret;
         }
         else if (current_props_array_id == 2) {
@@ -200,6 +203,7 @@ public:
                 ret += h_props[i].partial_cnt;
             }
             free(h_props);
+            printf("second_props_array length: %d\n", second_props_array_len);
             return ret;
         }
         else assert(0);

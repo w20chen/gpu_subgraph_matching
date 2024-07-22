@@ -8,6 +8,7 @@
 #include <vector>
 #include <cstdint>
 #include <assert.h>
+#include "cuda_runtime.h"
 
 #define ull unsigned long long
 
@@ -161,10 +162,7 @@ void check_gpu_props() {
     }
 }
 
-int ceil_div(int a, int b) {
-    assert(b);
-    return (a + b - 1) / b;
-}
+#define ceil_div(a, b) (((a) + (b) - 1) / (b))
 
 void print_array(int *arr, int len) {
     if (len > 100) {

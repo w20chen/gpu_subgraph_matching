@@ -1,3 +1,4 @@
+g++ -x c++  -E -dM -< /dev/null | grep __cplusplus
 cd ./build
 cmake -DCMAKE_BUILD_TYPE=Debug ..
 make
