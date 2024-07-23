@@ -63,6 +63,8 @@ void __global__ BFS_Extend(
         return;
     }
 
+    assert(__activemask() == 0xffffffff);
+
     assert(partial_matching_len >= 2);
 
     // find first backward neighbor fuu of u
