@@ -19,7 +19,7 @@ class MemPool {
     nextAddr;               // address of next available block
 
 public:
-    const int blockSize = 128;                     // # of bytes within a block
+    const int blockSize = 1024;                     // # of bytes within a block
     const int blockNum = 1024 * 16;                          // # of memory blocks within a mempool
     const int blockIntNum = blockSize / sizeof(int);    // # of integers within a block
     const int poolSize = blockNum * blockSize;          // # of bytes within a mempool

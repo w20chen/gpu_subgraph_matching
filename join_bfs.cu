@@ -63,7 +63,13 @@ void __global__ BFS_Extend(
         return;
     }
 
-    assert(__activemask() == 0xffffffff);
+    bool debug_flag = 0;
+    // 24843,3457,82,
+    if (this_partial_matching[0] == 24843 && this_partial_matching[1] == 3457) {
+        debug_flag = 1;
+    }
+
+    // assert(__activemask() == 0xffffffff);
 
     assert(partial_matching_len >= 2);
 
@@ -102,7 +108,7 @@ void __global__ BFS_Extend(
     extern __shared__ int blk_write_cnt[];
     blk_write_cnt[warp_id_in_blk] = 0;
 
-    __syncwarp();
+    // __syncwarp();
 
     // compute extendable candidate set
     // for (int lid = lane_id; lid < flen; lid += warpSize) {
@@ -110,15 +116,21 @@ void __global__ BFS_Extend(
     for (int t = 0; t < ut; t++) {
         int lid = t * warpSize + lane_id;
         unsigned int loop_mask = 0;
-        __syncwarp();
-        loop_mask = __ballot_sync(0xffffffff, lid < flen);
+        // printf("wid:%d, t:%d\n", warp_id, t);
+        // __syncwarp();
+        // loop_mask = __ballot_sync(0xffffffff, lid < flen);
         // printf("%d loop mask: %p\n", lid, loop_mask);
-        __syncwarp();
+        // __syncwarp();
         if (lid >= flen) {
             break;
         }
 
         int v = fset[lid];
+
+        if (debug_flag == 1 && v == 82) {
+            printf("#%d#%d#%d#%d#%d#%d\n", lid, tid, t, lane_id, warp_id, partial_offset);
+        }
+
         bool flag = true;
         // for each backward neighbor uu of u (except fuu)
         for (int ii = Q.d_bknbrs_offset_[u] + 1; ii < Q.d_bknbrs_offset_[u + 1]; ii++) {
@@ -138,7 +150,7 @@ void __global__ BFS_Extend(
             }
         }
 
-        __syncwarp(loop_mask);
+        // __syncwarp();
 
         // unsigned flag_mask = __ballot_sync(0xffffffff, flag);
 
@@ -146,10 +158,12 @@ void __global__ BFS_Extend(
         if (flag) {
             int old_cnt = atomicAdd(&blk_write_cnt[warp_id_in_blk], 1);
 
+            // unsigned mask = __ballot_sync(flag_mask, (old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum);
+            // printf("mask: %p\n", mask);
             // allocate a new block for this warp
             if ((old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum) {
                 // printf("tid: %d, old_cnt: %d, partial_matching_len: %d\n", tid, old_cnt, partial_matching_len);
-                // assert(0);
+                assert(0);
                 blk_write_cnt[warp_id_in_blk] = 0;
 
                 unsigned mask = __activemask();
@@ -192,7 +206,7 @@ void __global__ BFS_Extend(
                 d_new_head[idx] = this_partial_matching[i];
             }
         }
-        __syncwarp(loop_mask);
+        // __syncwarp();
     }
 
     __syncthreads();    // important
@@ -262,7 +276,7 @@ int join_bfs(
 
         // For each partial matching, assign a warp.
         int totalBlocks = ceil_div(partial_matching_cnt, warpsPerBlock);
-        const int maxBlocks = 2;
+        const int maxBlocks = 1;
 
         for (int partial_offset = 0; partial_offset < partial_matching_cnt; partial_offset += maxBlocks * warpsPerBlock) {
             printf("call kernel <<<%d, %d, %d>>>\n", maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int));
@@ -279,5 +293,8 @@ int join_bfs(
     }
 
     int ret = h_MM.get_partial_cnt();
+
+    // h_MM.dump("result.txt");
+
     return ret;
 }

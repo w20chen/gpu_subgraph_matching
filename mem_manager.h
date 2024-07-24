@@ -43,6 +43,7 @@ public:
         int need_blk_num = ceil_div(partial_matching_cnt, partial_matching_num_per_blk);
 
         printf("need block num: %d\n", need_blk_num);
+        assert(need_blk_num >= 1);
 
         partial_props *h_first_props_array = (partial_props *)malloc(sizeof(partial_props) * need_blk_num);
         assert(h_first_props_array != nullptr);
@@ -145,7 +146,16 @@ public:
             cnt += p.partial_cnt;
             if (cnt > warp_id) {
                 *partial_matching_len = p.partial_len;
-                return p.start_addr + (warp_id - cnt + p.partial_cnt) * p.partial_len;
+                int *ret = p.start_addr + (warp_id - cnt + p.partial_cnt) * p.partial_len;
+                if (warp_id == 3072) {
+                    printf("#3072:%p\n", ret);  // 0x717ede006000
+                    printf("a[0]=%d,a[1]=%d\n", ret[0], ret[1]);    // a[0]=24843,a[1]=3457
+                }
+                else if (warp_id == 2944) {
+                    printf("#2944:%p\n", ret);  // 0x717ede005c00
+                    printf("a[0]=%d,a[1]=%d\n", ret[0], ret[1]);    // a[0]=24843,a[1]=3457
+                }
+                return ret;
             }
         }
         *partial_matching_len = 0;
@@ -208,5 +218,45 @@ public:
         }
         else assert(0);
         return 0;
+    }
+
+    __host__ void dump(char *filename) {
+        FILE *fp = fopen(filename, "w");
+        assert(fp != nullptr);
+        partial_props *d_props_array = nullptr;
+        int props_array_len = 0;
+        if (current_props_array_id == 1) {
+            d_props_array = first_props_array;
+            props_array_len = first_props_array_len;
+        }
+        else if (current_props_array_id == 2) {
+            d_props_array = second_props_array;
+            props_array_len = second_props_array_len;
+        }
+        else assert(0);
+
+        partial_props *props_array = (partial_props *)malloc(sizeof(partial_props) * props_array_len);
+        assert(props_array != nullptr);
+        CHECK(cudaMemcpy(props_array, d_props_array, sizeof(partial_props) * props_array_len, cudaMemcpyDeviceToHost));
+
+        for (int i = 0; i < props_array_len; i++) {     // for each allocated block
+            partial_props *p = props_array + i;
+            int num = p->partial_cnt;
+            int len = p->partial_len;
+            int *d_addr = p->start_addr;
+            int *h_addr = (int *)malloc(sizeof(int) * num * len);
+            CHECK(cudaMemcpy(h_addr, d_addr, sizeof(int) * num * len, cudaMemcpyDeviceToHost));
+            for (int j = 0; j < num; j++) {
+                int *line = h_addr + len * j;
+                for (int k = 0; k < len; k++) {
+                    fprintf(fp, "%d,", line[k]);
+                }
+                fprintf(fp, "\n");
+            }
+            free(h_addr);
+        }
+
+        fclose(fp);
+        printf("Result saved in %s\n", filename);
     }
 };
