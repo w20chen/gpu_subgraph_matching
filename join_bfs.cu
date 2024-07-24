@@ -33,8 +33,19 @@ __host__ int *set_beginning_partial_matchings(
     cnt = beginning_partial_matching_cnt;
 
     // Debug
-    printf("(%d,%d), (%d,%d), ...\n", h_beginning_partial_matching.at(0).first, h_beginning_partial_matching.at(0).second,
-        h_beginning_partial_matching.at(1).first, h_beginning_partial_matching.at(1).second);
+    // (1,82), (1,5460), ..., (37550,165), (37550,5734)
+    // printf("(%d,%d), (%d,%d), ..., (%d,%d), (%d,%d)\n", 
+    //     h_beginning_partial_matching.at(0).first, h_beginning_partial_matching.at(0).second,
+    //     h_beginning_partial_matching.at(1).first, h_beginning_partial_matching.at(1).second,
+    //     h_beginning_partial_matching.at(cnt - 2).first, h_beginning_partial_matching.at(cnt - 2).second,
+    //     h_beginning_partial_matching.at(cnt - 1).first, h_beginning_partial_matching.at(cnt - 1).second);
+
+    // FILE *fp = fopen("set_beg.txt", "w");
+    // for (int i = 0; i < cnt; i++) {
+    //     fprintf(fp, "%d,%d,\n", h_beginning_partial_matching[i].first, h_beginning_partial_matching[i].second);
+    // }
+    // fclose(fp);
+
     return d_dst;
 }
 
@@ -63,14 +74,6 @@ void __global__ BFS_Extend(
         return;
     }
 
-    bool debug_flag = 0;
-    // 24843,3457,82,
-    if (this_partial_matching[0] == 24843 && this_partial_matching[1] == 3457) {
-        debug_flag = 1;
-    }
-
-    // assert(__activemask() == 0xffffffff);
-
     assert(partial_matching_len >= 2);
 
     // find first backward neighbor fuu of u
@@ -94,10 +97,8 @@ void __global__ BFS_Extend(
         // printf("%u %p\n", d_new_head_lower, d_new_head);
         d_new_head_upper = (unsigned)((unsigned long long)d_new_head >> 32);
     }
-    __syncwarp();
     d_new_head_lower = __shfl_sync(0xffffffff, d_new_head_lower, 0);
     d_new_head_upper = __shfl_sync(0xffffffff, d_new_head_upper, 0);
-    __syncwarp();
     d_new_head = (int *)(((unsigned long long)d_new_head_upper << 32) | (unsigned long long)d_new_head_lower);
 
     assert(d_new_head_upper != 0);
@@ -108,14 +109,12 @@ void __global__ BFS_Extend(
     extern __shared__ int blk_write_cnt[];
     blk_write_cnt[warp_id_in_blk] = 0;
 
-    // __syncwarp();
 
     // compute extendable candidate set
-    // for (int lid = lane_id; lid < flen; lid += warpSize) {
     int ut = ceil_div(flen, warpSize);
     for (int t = 0; t < ut; t++) {
         int lid = t * warpSize + lane_id;
-        unsigned int loop_mask = 0;
+        // unsigned int loop_mask = 0;
         // printf("wid:%d, t:%d\n", warp_id, t);
         // __syncwarp();
         // loop_mask = __ballot_sync(0xffffffff, lid < flen);
@@ -126,10 +125,6 @@ void __global__ BFS_Extend(
         }
 
         int v = fset[lid];
-
-        if (debug_flag == 1 && v == 82) {
-            printf("#%d#%d#%d#%d#%d#%d\n", lid, tid, t, lane_id, warp_id, partial_offset);
-        }
 
         bool flag = true;
         // for each backward neighbor uu of u (except fuu)
@@ -163,7 +158,7 @@ void __global__ BFS_Extend(
             // allocate a new block for this warp
             if ((old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum) {
                 // printf("tid: %d, old_cnt: %d, partial_matching_len: %d\n", tid, old_cnt, partial_matching_len);
-                assert(0);
+                // assert(0);
                 blk_write_cnt[warp_id_in_blk] = 0;
 
                 unsigned mask = __activemask();
@@ -172,7 +167,7 @@ void __global__ BFS_Extend(
                 int leader = __ffs(mask) - 1;
                 unsigned d_new_head_lower = 0;
                 unsigned d_new_head_upper = 0;
-                if (lid == leader) {
+                if (lane_id == leader) {
                     // add new props
                     partial_props p;
                     p.start_addr = d_new_head;
@@ -181,17 +176,25 @@ void __global__ BFS_Extend(
                     d_MM->add_new_props(p);
 
                     d_new_head = d_MM->write_mempool()->alloc();
+                    assert(d_new_head);
                     d_new_head_lower = (unsigned)d_new_head;
+                    assert(d_new_head_lower);
                     d_new_head_upper = (unsigned)((unsigned long long)d_new_head >> 32);
+                    assert(d_new_head_upper);
+                    // printf("#%p %p\n", d_new_head_upper, d_new_head_lower);
                 }
-                __syncwarp(mask);
-                d_new_head_lower = __shfl_sync(0xffffffff, d_new_head_lower, 0);
-                d_new_head_upper = __shfl_sync(0xffffffff, d_new_head_upper, 0);
-                __syncwarp(mask);
+                __syncwarp();
+                d_new_head_lower = __shfl_sync(0xffffffff, d_new_head_lower, leader);
+                d_new_head_upper = __shfl_sync(0xffffffff, d_new_head_upper, leader);
                 d_new_head = (int *)(((unsigned long long)d_new_head_upper << 32) | (unsigned long long)d_new_head_lower);
-
+                __syncwarp();
+                // assert(d_new_head_lower);
+                // assert(d_new_head_upper);
+                if (d_new_head == nullptr) {
+                    printf("%p %p\n", d_new_head_upper, d_new_head_lower);
+                }
                 old_cnt = atomicAdd(&blk_write_cnt[warp_id_in_blk], 1);
-                __syncwarp(mask);
+                // __syncwarp(mask);
             }
 
             // __syncwarp(flag_mask);
@@ -209,7 +212,7 @@ void __global__ BFS_Extend(
         // __syncwarp();
     }
 
-    __syncthreads();    // important
+    __syncthreads();
 
     if (lane_id == 0) {
         if (blk_write_cnt[warp_id_in_blk] > 0) {
@@ -279,8 +282,8 @@ int join_bfs(
         const int maxBlocks = 1;
 
         for (int partial_offset = 0; partial_offset < partial_matching_cnt; partial_offset += maxBlocks * warpsPerBlock) {
-            printf("call kernel <<<%d, %d, %d>>>\n", maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int));
-            printf("partial_offset: %d\n", partial_offset);
+            // printf("call kernel <<<%d, %d, %d>>>\n", maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int));
+            printf("partial_offset: %d / %d\n", partial_offset, partial_matching_cnt);
             BFS_Extend<<<maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int)>>>(
                 Q, G, cg, d_MM, matching_order[partial_matching_len], d_rank, partial_offset
             );

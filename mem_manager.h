@@ -70,11 +70,18 @@ public:
         CHECK(
             cudaMemcpy(
                 h_first_props_array[need_blk_num - 1].start_addr, 
-                partial_matching_addr + (need_blk_num - 2) * partial_matching_num_per_blk * partial_matching_len, 
+                partial_matching_addr + (need_blk_num - 1) * partial_matching_num_per_blk * partial_matching_len, 
                 l * partial_matching_len * sizeof(int),
                 cudaMemcpyDeviceToDevice
             )
         );
+
+        // Debug
+        // printf("#: %d\n", (need_blk_num - 2) * partial_matching_num_per_blk * partial_matching_len);
+        // int W[4];
+        // CHECK(cudaMemcpy(W, h_first_props_array[need_blk_num - 1].start_addr, sizeof(int) * 4, cudaMemcpyDeviceToHost));
+        // // 0x770216006000 --> 24843 3457 25253 587
+        // printf("%p --> %d %d %d %d\n", h_first_props_array[need_blk_num - 1].start_addr, W[0], W[1], W[2], W[3]);
 
         for (int i = 0; i < need_blk_num; i++) {
             printf("props[%d], start %p, cnt %d, len %d\n", i, h_first_props_array[i].start_addr,
@@ -93,13 +100,15 @@ public:
         printf("Memory manager initialized.\n");
 
         // Debug
-        int *A = (int *)malloc(sizeof(int) * 4);
-        int *B = (int *)malloc(sizeof(int) * 4);
-        CHECK(cudaMemcpy(A, h_first_props_array[0].start_addr, sizeof(int) * 4, cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(B, h_first_props_array[1].start_addr, sizeof(int) * 4, cudaMemcpyDeviceToHost));
-        printf("Candidate edges: (%d,%d), (%d,%d), (%d,%d), (%d,%d), ...\n", A[0], A[1], A[2], A[3], B[0], B[1], B[2], B[3]);
+        // int *A = (int *)malloc(sizeof(int) * 4);
+        // int *B = (int *)malloc(sizeof(int) * 4);
+        // CHECK(cudaMemcpy(A, h_first_props_array[0].start_addr, sizeof(int) * 4, cudaMemcpyDeviceToHost));
+        // CHECK(cudaMemcpy(B, h_first_props_array[1].start_addr, sizeof(int) * 4, cudaMemcpyDeviceToHost));
+        // printf("Candidate edges: (%d,%d), (%d,%d), (%d,%d), (%d,%d), ...\n", A[0], A[1], A[2], A[3], B[0], B[1], B[2], B[3]);
 
         free(h_first_props_array);
+
+        // this->dump("start.txt");
     }
 
     __device__ MemPool *write_mempool() {
@@ -147,14 +156,6 @@ public:
             if (cnt > warp_id) {
                 *partial_matching_len = p.partial_len;
                 int *ret = p.start_addr + (warp_id - cnt + p.partial_cnt) * p.partial_len;
-                if (warp_id == 3072) {
-                    printf("#3072:%p\n", ret);  // 0x717ede006000
-                    printf("a[0]=%d,a[1]=%d\n", ret[0], ret[1]);    // a[0]=24843,a[1]=3457
-                }
-                else if (warp_id == 2944) {
-                    printf("#2944:%p\n", ret);  // 0x717ede005c00
-                    printf("a[0]=%d,a[1]=%d\n", ret[0], ret[1]);    // a[0]=24843,a[1]=3457
-                }
                 return ret;
             }
         }

@@ -48,7 +48,7 @@ public:
         }
 
         unsigned long long oldNextAddr = atomicAdd(&nextAddr.val_ull, (unsigned long long)blockSize);
-        printf("Device alloc: %p\n", (int *)oldNextAddr);   // something like 0x7f1de1c00000
+        // printf("Device alloc: %p\n", (int *)oldNextAddr);   // something like 0x7f1de1c00000
         return (int *)oldNextAddr;
     }
 
