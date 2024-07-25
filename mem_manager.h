@@ -25,11 +25,11 @@ public:
         current_props_array_id = 0;
     }
 
-    __host__ void
-    init(int *partial_matching_addr, int partial_matching_cnt, int partial_matching_len = 2) {
+    __host__ void init(int *partial_matching_addr, int partial_matching_cnt) {
         current_props_array_id = 0;
 
-        int partial_matching_num_per_blk = memPoolBlockIntNum / partial_matching_len;
+        const int partial_matching_num_per_blk = memPoolBlockIntNum / 2;
+        assert(memPoolBlockIntNum % 2 == 0);
         int need_blk_num = ceil_div(partial_matching_cnt, partial_matching_num_per_blk);
 
         printf("need block num: %d\n", need_blk_num);
@@ -38,41 +38,29 @@ public:
         partial_props *h_first_props_array = (partial_props *)malloc(sizeof(partial_props) * need_blk_num);
         assert(h_first_props_array != nullptr);
 
-        for (int i = 0; i + 1 < need_blk_num; i++) {
-            h_first_props_array[i].start_addr = _mem_pool[0].h_alloc();
+        int i = 0;
+        for (i = 0; i + 1 < need_blk_num; i++) {
+            h_first_props_array[i].start_addr = partial_matching_addr + 2 * i * partial_matching_num_per_blk;
             h_first_props_array[i].partial_cnt = partial_matching_num_per_blk;
-            h_first_props_array[i].partial_len = partial_matching_len;
-            CHECK(
-                cudaMemcpy(
-                    h_first_props_array[i].start_addr, 
-                    partial_matching_addr + i * partial_matching_num_per_blk * partial_matching_len, 
-                    sizeof(int) * memPoolBlockIntNum, 
-                    cudaMemcpyDeviceToDevice
-                )
-            );
+            h_first_props_array[i].partial_len = 2;
         }
 
         // last block
-        int l = partial_matching_cnt - partial_matching_num_per_blk * (need_blk_num - 1);
-        h_first_props_array[need_blk_num - 1].start_addr = _mem_pool[0].h_alloc();
-        h_first_props_array[need_blk_num - 1].partial_cnt = l;
-        h_first_props_array[need_blk_num - 1].partial_len = partial_matching_len;
-        CHECK(
-            cudaMemcpy(
-                h_first_props_array[need_blk_num - 1].start_addr, 
-                partial_matching_addr + (need_blk_num - 1) * partial_matching_num_per_blk * partial_matching_len, 
-                l * partial_matching_len * sizeof(int),
-                cudaMemcpyDeviceToDevice
-            )
-        );
+        assert(i + 1 == need_blk_num);
+        h_first_props_array[i].start_addr = partial_matching_addr + 2 * i * partial_matching_num_per_blk;
+        h_first_props_array[i].partial_cnt = partial_matching_cnt - partial_matching_num_per_blk * i;
+        h_first_props_array[i].partial_len = 2;
 
         for (int i = 0; i < need_blk_num; i++) {
-            printf("props[%d], start %p, cnt %d, len %d\n", i, h_first_props_array[i].start_addr,
-                h_first_props_array[i].partial_cnt, h_first_props_array[i].partial_len);
+            printf("props[%d]: start %p, cnt %d, len %d\n", 
+            i, h_first_props_array[i].start_addr,
+            h_first_props_array[i].partial_cnt, h_first_props_array[i].partial_len);
         }
 
-        CHECK(cudaMalloc(&_props_array[0], sizeof(partial_props) * 1024 * 1024));
-        CHECK(cudaMalloc(&_props_array[1], sizeof(partial_props) * 1024 * 1024));
+        const int props_max_num = 1024 * 1024;
+        assert(props_max_num >= memPoolBlockNum);
+        CHECK(cudaMalloc(&_props_array[0], sizeof(partial_props) * props_max_num));
+        CHECK(cudaMalloc(&_props_array[1], sizeof(partial_props) * props_max_num));
 
         CHECK(cudaMemcpy(_props_array[0], h_first_props_array, sizeof(partial_props) * need_blk_num, cudaMemcpyHostToDevice));
 

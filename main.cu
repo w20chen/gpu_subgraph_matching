@@ -11,7 +11,6 @@
 
 
 int main(int argc, char **argv) {
-    std::cout << sizeof(MemPool) << std::endl;
     InputParser cmd_parser(argc, argv);
     assert(cmd_parser.check_cmd_option_exists("-q"));
     assert(cmd_parser.check_cmd_option_exists("-d"));

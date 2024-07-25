@@ -31,7 +31,7 @@ public:
 
         nextAddr = head;
         nextAddrBound = head + memPoolBlockNum * memPoolBlockIntNum;
-        printf("nextAddrBound: %p\n", nextAddrBound);
+        printf("head: %p, nextAddrBound: %p\n", head, nextAddrBound);
     }
 
     __device__ __forceinline__ int *alloc() {
@@ -56,10 +56,6 @@ public:
 
     __host__ void freeAll() {
         nextAddr = head;
-    }
-
-    __device__ void print_meta() {
-        assert(0);
     }
 
     void deallocate() {

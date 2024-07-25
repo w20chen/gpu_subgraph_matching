@@ -70,6 +70,8 @@ void __global__ BFS_Extend(
     int partial_matching_len = 0;
     int *this_partial_matching = d_MM->get_partial(warp_id + partial_offset, &partial_matching_len);
 
+    // printf("(%d,%d)\n", this_partial_matching[0], this_partial_matching[1]);
+
     if (this_partial_matching == nullptr) {
         return;
     }
@@ -245,7 +247,7 @@ int join_bfs(
     // Move a table of initial partial matchings (candidate edges) to memory pool.
     h_MM.init(d_partial_matchings, partial_matching_cnt);
 
-    CHECK(cudaFree(d_partial_matchings));
+    // CHECK(cudaFree(d_partial_matchings));
 
     MemManager *d_MM = nullptr;
     CHECK(cudaMalloc(&d_MM, sizeof(MemManager)));
@@ -283,7 +285,7 @@ int join_bfs(
 
         for (int partial_offset = 0; partial_offset < partial_matching_cnt; partial_offset += maxBlocks * warpsPerBlock) {
             // printf("call kernel <<<%d, %d, %d>>>\n", maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int));
-            printf("partial_offset: %d / %d\n", partial_offset, partial_matching_cnt);
+            // printf("partial_offset: %d / %d\n", partial_offset, partial_matching_cnt);
             BFS_Extend<<<maxBlocks, threadsPerBlock, warpsPerBlock * sizeof(int)>>>(
                 Q, G, cg, d_MM, matching_order[partial_matching_len], d_rank, partial_offset
             );
