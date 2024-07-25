@@ -8,22 +8,17 @@
 #include "helper.h"
 
 
+#define memPoolBlockSize 1024                                   // # of bytes within a block
+#define memPoolBlockNum 1024 * 16                               // # of memory blocks within a mempool
+#define memPoolBlockIntNum (memPoolBlockSize / sizeof(int))     // # of integers within a block
+
+
 class MemPool {
     int *head;              // starting address of memory pool
     int *nextAddrBound;     // upper bound of nextAddr
-
-    union {
-        int *val_int;
-        unsigned long long val_ull; 
-    } 
-    nextAddr;               // address of next available block
+    int *nextAddr;          // address of next available block
 
 public:
-    const int blockSize = 1024;                     // # of bytes within a block
-    const int blockNum = 1024 * 16;                          // # of memory blocks within a mempool
-    const int blockIntNum = blockSize / sizeof(int);    // # of integers within a block
-    const int poolSize = blockNum * blockSize;          // # of bytes within a mempool
-
     MemPool() {
         assert(sizeof(char) == 1);
         assert(sizeof(int) == 4);
@@ -31,36 +26,36 @@ public:
         assert(sizeof(unsigned long long) == 8);
         assert(sizeof(int *) == sizeof(unsigned long long));
 
-        CHECK(cudaMalloc(&head, poolSize));
-        CHECK(cudaMemset(head, -1, poolSize));
+        CHECK(cudaMalloc(&head, memPoolBlockNum * memPoolBlockSize));
+        CHECK(cudaMemset(head, -1, memPoolBlockNum * memPoolBlockSize));
 
-        nextAddr.val_int = head;
-        nextAddrBound = head + blockNum * blockIntNum;
-        printf("nextAddrBound: %p\n", nextAddrBound);       // something like 0x7f1de1df4000
+        nextAddr = head;
+        nextAddrBound = head + memPoolBlockNum * memPoolBlockIntNum;
+        printf("nextAddrBound: %p\n", nextAddrBound);
     }
 
     __device__ __forceinline__ int *alloc() {
-        if (nextAddr.val_int >= nextAddrBound) {
+        if (nextAddr >= nextAddrBound) {
             printf("No more available block in mempool. nextAddrBound: %p, nextAddr: %p\n",
-                nextAddrBound, nextAddr.val_int);
+                nextAddrBound, nextAddr);
             assert(0);
             return nullptr;
         }
 
-        unsigned long long oldNextAddr = atomicAdd(&nextAddr.val_ull, (unsigned long long)blockSize);
-        // printf("Device alloc: %p\n", (int *)oldNextAddr);   // something like 0x7f1de1c00000
+        unsigned long long oldNextAddr = atomicAdd((unsigned long long *)&nextAddr, (unsigned long long)memPoolBlockSize);
+        // printf("Device alloc: %p\n", (int *)oldNextAddr);
         return (int *)oldNextAddr;
     }
 
     __host__ int *h_alloc() {
-        // printf("Host alloc: %p\n", nextAddr.val_int);
-        int *addr = nextAddr.val_int;
-        nextAddr.val_int += blockIntNum;
+        // printf("Host alloc: %p\n", nextAddr);
+        int *addr = nextAddr;
+        nextAddr += memPoolBlockIntNum;
         return addr;
     }
 
     __host__ void freeAll() {
-        nextAddr.val_int = head;
+        nextAddr = head;
     }
 
     __device__ void print_meta() {

@@ -91,7 +91,7 @@ void __global__ BFS_Extend(
     unsigned d_new_head_lower = 0;
     unsigned d_new_head_upper = 0;
     if (lane_id == 0) {
-        d_new_head = d_MM->write_mempool()->alloc();
+        d_new_head = d_MM->mempool_to_write()->alloc();
         assert(d_new_head != nullptr);
         d_new_head_lower = (unsigned)d_new_head;
         // printf("%u %p\n", d_new_head_lower, d_new_head);
@@ -156,7 +156,7 @@ void __global__ BFS_Extend(
             // unsigned mask = __ballot_sync(flag_mask, (old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum);
             // printf("mask: %p\n", mask);
             // allocate a new block for this warp
-            if ((old_cnt + 1) * (partial_matching_len + 1) > d_MM->blockIntNum) {
+            if ((old_cnt + 1) * (partial_matching_len + 1) > memPoolBlockIntNum) {
                 // printf("tid: %d, old_cnt: %d, partial_matching_len: %d\n", tid, old_cnt, partial_matching_len);
                 // assert(0);
                 blk_write_cnt[warp_id_in_blk] = 0;
@@ -175,7 +175,7 @@ void __global__ BFS_Extend(
                     p.partial_cnt = old_cnt;
                     d_MM->add_new_props(p);
 
-                    d_new_head = d_MM->write_mempool()->alloc();
+                    d_new_head = d_MM->mempool_to_write()->alloc();
                     assert(d_new_head);
                     d_new_head_lower = (unsigned)d_new_head;
                     assert(d_new_head_lower);
@@ -201,7 +201,7 @@ void __global__ BFS_Extend(
 
             // write the newly found partial matching
             int idx = old_cnt * (partial_matching_len + 1) + partial_matching_len;
-            assert(idx < d_MM->blockIntNum && idx >= 0);
+            assert(idx < memPoolBlockIntNum && idx >= 0);
             // printf("%d\n", idx);
             d_new_head[idx] = v;
             for (int i = 0; i < partial_matching_len; i++) {
