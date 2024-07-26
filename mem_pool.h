@@ -34,7 +34,7 @@ public:
         printf("head: %p, nextAddrBound: %p\n", head, nextAddrBound);
     }
 
-    __device__ __forceinline__ int *alloc() {
+    __device__ __forceinline__ int *alloc(int flag = 0) {
         if (nextAddr >= nextAddrBound) {
             printf("No more available block in mempool. nextAddrBound: %p, nextAddr: %p\n",
                 nextAddrBound, nextAddr);
@@ -43,7 +43,8 @@ public:
         }
 
         unsigned long long oldNextAddr = atomicAdd((unsigned long long *)&nextAddr, (unsigned long long)memPoolBlockSize);
-        // printf("Device alloc: %p\n", (int *)oldNextAddr);
+        if (flag) printf("#Device alloc: %p\n", (int *)oldNextAddr);
+        else printf("Device alloc: %p\n", (int *)oldNextAddr);
         return (int *)oldNextAddr;
     }
 
@@ -60,6 +61,11 @@ public:
 
     void deallocate() {
         CHECK(cudaFree(head));
+    }
+
+    static void print_meta() {
+        printf("memPoolBlockSize=%d, memPoolBlockNum=%d, memPoolBlockIntNum=%d.\n",
+            memPoolBlockSize, memPoolBlockNum, memPoolBlockIntNum);
     }
 };
 

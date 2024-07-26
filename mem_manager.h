@@ -13,6 +13,7 @@ class MemManager {
     MemPool _mem_pool[2];
 
     int current_props_array_id;     // ID of MemPool with unfinished partial matchings
+    const int props_max_num = 1024 * 1024;
 
 public:
     MemManager() {
@@ -57,7 +58,6 @@ public:
             h_first_props_array[i].partial_cnt, h_first_props_array[i].partial_len);
         }
 
-        const int props_max_num = 1024 * 1024;
         assert(props_max_num >= memPoolBlockNum);
         CHECK(cudaMalloc(&_props_array[0], sizeof(partial_props) * props_max_num));
         CHECK(cudaMalloc(&_props_array[1], sizeof(partial_props) * props_max_num));
@@ -108,6 +108,7 @@ public:
     __device__ void add_new_props(partial_props props) {
         assert(props.partial_cnt > 0);
         int old = atomicAdd(&_props_array_len[current_props_array_id ^ 1], 1);
+        assert(old >= 0 && old < props_max_num);
         _props_array[current_props_array_id ^ 1][old] = props;
     }
 
@@ -152,5 +153,12 @@ public:
 
         fclose(fp);
         printf("Result saved in %s\n", filename);
+    }
+
+    void deallocate() {
+        _mem_pool[0].deallocate();
+        _mem_pool[1].deallocate();
+        CHECK(cudaFree(_props_array[0]));
+        CHECK(cudaFree(_props_array[1]));
     }
 };

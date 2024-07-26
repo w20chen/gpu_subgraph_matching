@@ -33,6 +33,8 @@ int main(int argc, char **argv) {
     candidate_graph CG(Q, G);
     candidate_graph_GPU CG_GPU(CG);
 
+    MemPool::print_meta();
+
     int ret = join_bfs(Q, G, Q_GPU, G_GPU, CG, CG_GPU, matching_order);
     printf("\033[41;37mResult: %d\033[0m\n", ret);
 
